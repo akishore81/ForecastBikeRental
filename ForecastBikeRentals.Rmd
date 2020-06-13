@@ -1,0 +1,766 @@
+---
+title: "Forecast Bike Rental"
+author: "Abhishek Kishore"
+date: "13/06/2020"
+output: github_document
+---
+
+### Objective
+The objective of this study is to help the bike company plan for any additional number of bikes that might be needed in case of high demand in the next three months. Or, if the demand is low the predction might be required to plan the removal of bikes needing maintenance from circulation, without impacting the ridership.
+
+Also, it migh also be important to see how many casual riders are using the bikes against the registered members to plan for the membership drive.
+
+```{r echo=FALSE}
+rm(list = ls())
+
+library(DataExplorer, warn.conflicts = FALSE)
+library(scales, warn.conflicts = FALSE)
+library(ggplot2, warn.conflicts = FALSE)
+library(M3, warn.conflicts = FALSE)
+library(corrplot, warn.conflicts = FALSE)
+library(car, warn.conflicts = FALSE)
+
+setwd("C:/Users/akishore/OneDrive - HCL Technologies Ltd/Abhishek Kishore Personal/Training/GreatLearning/Capstone Project/Forecast Bike Rentals")
+
+train_dataset= read.csv("Train.csv", stringsAsFactors = FALSE)
+test_dataset = read.csv("test.csv", stringsAsFactors = FALSE)
+```
+
+###Exploratory Data Analysis
+
+```{r echo=FALSE}
+str(train_dataset)
+```
+
+* **Observations**
+  + The training dataset has a total of 15211 records with 16 features.
+  + Feature "instant" indicates that record instance and is not required for analysis.
+  + Feature "dteday"" can be combined with "hr"" to have a combined data and time field.
+  + "dteday" indicates the date on which the observation was made.
+  + "season" indicates the season during which the observation was made.
+  + "yr" indicates the year of observation
+  + "mnth" indicates the month in which the observation was made.
+  + "hr" indicate the hour of day during which the observatio was made.
+  + "holiday" indicates if the observation was made on a holiday or not.
+  + "weekday" indicates the day of the week on which the observation was made.
+  + "workingday" indicates if the observatio was made on a working day or during a holiday/weekend.
+  + "weathersit" indicates the weather at the time of observation.
+  + "temp" indicates the degree celcius temaprature at the time of observation.
+  + "atem" indicates the degree celcius temaprature actually fealt at the time of observation.
+  + "hum" indicates the humiditymeasure at the time of observation.
+  + "windspeed" indicates the speed of wind at the time of observation.
+  + "casual" indicates the number of non-member riders that took rides at the time of observation.
+  + "registered" indicates the number of members that tool rides at the time of observation.
+  + "cnt" indicates the total number of riders that took rides at the time of observation.
+
+##Feature Renaming
+
+```{r}
+# Removing instant feature
+train_dataset = train_dataset[,-1]
+
+names(train_dataset)[1] = "DateDay"
+names(train_dataset)[2] = "Season"
+names(train_dataset)[3] = "Year"
+names(train_dataset)[4] = "Month"
+names(train_dataset)[5] = "Hour"
+names(train_dataset)[6] = "Holiday"
+names(train_dataset)[7] = "Weekday"
+names(train_dataset)[8] = "WorkingDay"
+names(train_dataset)[9] = "Weather"
+names(train_dataset)[10] = "Temprature"
+names(train_dataset)[11] = "TempratureFelt"
+names(train_dataset)[12] = "Humidity"
+names(train_dataset)[13] = "WindSpeed"
+names(train_dataset)[14] = "CasualRiders"
+names(train_dataset)[15] = "RegisteredRiders"
+names(train_dataset)[16] = "TotalRiders"
+```
+
+##Check Missing Data
+
+```{r echo=FALSE}
+plot_missing(train_dataset)
+```
+
+* **Observations**
+  + No missing data found in test dataset.
+
+##Check Multi-Collinearity
+
+```{r echo=FALSE}
+corrplot(cor(train_dataset[,-c(1)]), method = "number", type = "upper", tl.cex = 1, cl.cex = 1, number.cex = 0.5)
+```
+
+* **Observations**
+  + Strong relation can be seen between Season and Month
+  + Strong relation can be seen between Temprature and TempratureFealt.
+  + Strong relation can be seen between CasualRiders and TotalRiders.
+  + Strong relation can be seen between RegisteredRiders and TotalRiders.
+  + Moderate relation can be seen between Season and Temprature & TempratureFelt.
+  + Moderate relation can be seen between Weather and Humidity.
+
+```{r echo=FALSE}
+season_labels = c("Spring", "Summer", "Fall", "Winter")
+weekday_labels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+workday_labels = c("Workday", "Holiday/Weekend")
+wheather_labels = c("Clear", "Cloudy", "LightShowers", "Bad")
+month_labels = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+train_dataset$DateDay = as.Date(train_dataset$DateDay, format = "%d-%m-%Y")
+
+train_dataset$Season =  factor(train_dataset$Season, levels = 1:4, labels = season_labels)
+train_dataset$Weekday = factor(train_dataset$Weekday,levels = 0:6, labels = weekday_labels)
+train_dataset$WorkingDay = factor(train_dataset$WorkingDay, levels = c(1,0), labels = workday_labels)
+train_dataset$Weather = factor(train_dataset$Weather, levels = 1:4, labels = wheather_labels)
+train_dataset$Holiday = factor(train_dataset$Holiday, levels = c(0,1), labels = c("No","Yes"))
+train_dataset$Year = factor(train_dataset$Year, levels = c(0,1), labels = c(2011,2012))
+train_dataset$Month = factor(train_dataset$Month, levels = 1:12, labels = month_labels)
+
+#train_dataset$DateTime = combine.date.and.time(train_dataset$dteday, time = list(hrs=train_dataset$hr, mins=00, secs=00))
+
+#str(train_dataset)
+```
+
+## Univariate Analysis
+
+```{r echo=FALSE}
+summary(train_dataset)
+```
+
+* **Observations**
+  + Higest number of observations were made in Fall season, followed by Summer, Spring and then Winter indicting imbalance on number of observations made and possible gaps between the obsevations.
+  + Data spread between features "Holiday", "Weekday" and "Working Day" are representing similar data points.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Temprature)) + geom_bar() + scale_y_continuous(labels = comma)
+```
+```{r echo=FALSE}
+ggplot(train_dataset, aes(y=Temprature)) + geom_boxplot() + coord_flip()
+```
+
+* **Observations**
+  + No temprature outliers noticed indicating absence of extrem tempratures.
+  + However, more higher tempratures noticed during the observation period.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(TempratureFelt)) + geom_bar() + scale_y_continuous(labels = comma)
+```
+```{r echo=FALSE}
+ggplot(train_dataset, aes(y=TempratureFelt)) + geom_boxplot() + coord_flip()
+```
+
+* **Observations**
+  + No extreme tempratures felt.
+  + Temprature felt was slightly on the higher side as noticed against actual temprature.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Humidity)) + geom_bar() + scale_y_continuous(labels = comma)
+```
+```{r echo=FALSE}
+ggplot(train_dataset, aes(y=Humidity)) + geom_boxplot() + coord_flip()
+```
+
+* **Observations**
+  + Zero humidity noticed as an outlier. But can not be ignore as it is possible to have zero humidity.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(WindSpeed)) + geom_bar() + scale_y_continuous(labels = comma)
+```
+```{r echo=FALSE}
+ggplot(train_dataset, aes(y=WindSpeed)) + geom_boxplot() + coord_flip()
+```
+
+* **Observations**
+  + Multiple outliers on wind speed can be noticed. But can not be ignored as its possiblity to have high windspeeds.
+
+
+## Bi-variate Analysis
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Season,TotalRiders)) + geom_col(aes(color = Season)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Fall season has the highest number of ridership.
+  + Ridership falls in winter and picks up again in Spring and Summer.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Month,TotalRiders)) + geom_col(aes(color = Month)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + The indicated observation coinsides with the observation made for seasons.
+  + During the last three months of the year, the ridership falls drastically.
+  + Starting Jaunary the riderships continues picks up again month on month untill winter. 
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Hour,TotalRiders)) + geom_col(aes(color = Hour)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Ridership remains low during the non woring hours.
+  + Ridership seems to high during the start of the office hours around 7 to 9 AM, with peak at 9 AM.
+  + More number of people seems to be using the bike in the evening than in the morning.
+  + Intrestingly, the bike usage starts to pick up starting mid-day.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Holiday,TotalRiders)) + geom_col(aes(color = Holiday)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Bike usage is more during working days (excluding weekends).
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Weekday,TotalRiders)) + geom_col(aes(color = Weekday)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Ridership seems to be almost same across all weekdays.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(WorkingDay,TotalRiders)) + geom_col(aes(color = WorkingDay)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Ridership is more during the workdays against holidays.
+  + On holiday or weekend, the usage falls.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Weather,TotalRiders)) + geom_col(aes(color = Weather)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Bike usage is higest while the weather is clear.
+  + Ridership drops drastically while the weathre is Cloudy/Misty or Showers and almost zero during bad weather.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Temprature,TotalRiders)) + geom_col(aes(color = Temprature)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + As temprature rises, the bike usage seems to go up. However, beyond 0.75 celcius the usage falls.
+  + Lesser the temprature, lesser the usage.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(TempratureFelt,TotalRiders)) + geom_col(aes(color = TempratureFelt)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + As people feel more temprature, the bike usage seems to go up. However, beyond 0.60 celcius the usage falls.
+  + Lesser the temprature felt, lesser the usage.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Humidity,TotalRiders)) + geom_col(aes(color = Humidity)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + No clear pattern can be found bwtween humidity and bike usage.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(WindSpeed,TotalRiders)) + geom_col(aes(color = WindSpeed)) + scale_y_continuous(labels = comma)
+```
+
+* **Observations**
+  + Bike usage is higest while wind is not blowing.
+  + Usage contines to drops as windspeed picks up beyond 0.20.
+
+
+
+
+
+### Project Notes II
+
+* **Observations from Project Notes I:**
+    + No missing values were noticed.
+    + Outliers need no treatment as indicated data points are possible in normal run.
+    + Higest number of observations were made in Fall season, followed by Summer, Spring and then Winter indicating imbalance on number of observations made and possible gaps between the obsevations. However, the difference is not huge.
+    + Bike usage seems to be almost same across all days of the week, wheather its a working day or holiday/weekend.
+    + Fall season has the highest number of ridership followed by summer, spring and winter.
+    + During the last three months of the year (Start of winter), the ridership falls drastically.
+    + Starting January the riderships continues to picks up again month on month untill winter.
+    + In mornings, the registered ridership starts to pick up from 6 AM with peaks at 8 AM. From 9 AM onwards the usage reamains almost same and picks up again starting 4 PM. 
+    + In evening, the registered ridership picks up from 4 PM and reaches peak at 5 PM and then gradually reduces.
+    + Between 00 AM and 5 AM, the registered ridership is at minumum.
+    + The casual ridership starts to pick up at 6 AM and gradually increaes untill it reaches peak usage at 5 PM before gradually reducing.
+    + Ridership is more during the workdays against holidays.
+    + Bike usage is higest while the weather is clear.
+    + Ridership drops drastically while the weather is Cloudy/Misty or Showers and almost zero during bad weather.
+    + As temprature rises, the bike usage seems to go up. However, beyond 0.75 celcius the usage falls.
+    + No clear pattern can be found bwtween humidity and bike usage.
+    + Bike usage is higest while wind is not blowing.
+    + Usage contines to drops as windspeed picks up beyond 0.20.
+
+
+
+### Exploratory Data Analysis
+
+## Relationship among variables, important variables
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Temprature,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +  
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+    + It can be observed that as teamprature rises, the average bike usage increases.  
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(TempratureFelt,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +  
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+    + It can be observed that as teamprature felt rises, the average bike usage increases.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Humidity,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +  
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+    + It can be observed that as humidity rises, the averge bike usage falls.
+    
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Weather,Humidity)) + stat_summary(fun.y="mean", geom="bar") +
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+    + It can be observed, on average the humidity is high during a cloudy, LightShowers or Bad/Heavy shower days.
+
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Temprature,Humidity)) + stat_summary(fun.y="mean", geom="bar") +
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+    + It can be observed, average the humidity falls as temprature increases.
+    
+```{r echo=FALSE}
+ggplot(train_dataset, aes(WindSpeed,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +  
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```    
+
+* **Observations**
+    + It can be observed, on average the bike usage increase as windspeed increases.However, we need to notice that windspeed had lot of natural outliers.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Hour,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+    + It can be observed, average the bike usage increases as day progresses.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Holiday,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Month,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +  
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+  + Montly trend can be seen in average bike usage.
+
+```{r echo=FALSE}
+ggplot(train_dataset, aes(Weekday,TotalRiders)) + stat_summary(fun.y="mean", geom="bar") +  
+  scale_y_continuous(labels = comma) + geom_smooth(method = "lm", col = "red")
+```
+
+* **Observations**
+  + No particlaur trend can be seen for weekdays on average bike usage.
+
+
+* **Other Observations**
+    + As per the correlation graph from Notes-I
+      + It can be noticed that Season and months are higly positively correlated.
+      + It can be noticed that Season and tempratures are positively correlated.
+      + It can be notices that actual temprature and temprature felt are correlated.
+      
+* **Important Variables Factors**
+    + Looking at the observed data (excluding higly correlated variables), the atmospheric conditions like Humidity, TempratureFelt, windspeed and Weather have a high impact on the bike usage.  
+    + Time factors ((excluding higly correlated variables) like Year, Weekday and season have high impact on bike usage.
+    
+```{r echo=FALSE}
+model_lm_weather = lm(TotalRiders ~ TempratureFelt+WindSpeed+Humidity+Weather+Season, data = train_dataset)
+
+summary(model_lm_weather)
+```
+```{r echo=FALSE}
+model_lm_time = lm(TotalRiders ~ Year+Weekday+Hour+Holiday, data = train_dataset)
+
+summary(model_lm_time)
+```
+* **Observations**
+    + As predicted earlier, it can be seen that following variables are significant for bike usage:
+      + TempratureFealt
+      + WindSpeed
+      + Humidity
+      + Weather
+      + Season
+      + Weekday
+      + Year
+
+## Data pre-processing
+
+# Removing Unwanted Variables
+  + "Instance" feature has been removed in Project Notes I.
+    
+## Missing Value Treatment
+  + As noticed in Project Notes I, there are not missing values.
+
+## Outlier Treatment
+  + Outlier treatment not required as observed in Project Notes I.
+
+## Variable Transformation and New variables
+  + Season can be split into Peak and Lean.
+    + Peak: Summer and Fall 
+    + Lean: Winter and Spring
+  + Hour of usage can be split into
+    + High: 7 to 9 and 17 to 19
+    + Medium: 10 to 16
+    + Low: 00 to 6 and 20 to 23
+  + Temprature can be split into 
+    + High(>0.75)
+    + Moderate(>0.25 and <0.75) 
+    + Low (<0.25)
+
+```{r}
+new_train_dataset = train_dataset
+
+new_train_dataset$Season_Peak = ifelse(new_train_dataset$Season == "Summer" | new_train_dataset$Season == "Winter",1,0)
+
+new_train_dataset$Hour_High = ifelse((new_train_dataset$Hour>=7 & new_train_dataset$Hour<=9)|
+                                       (new_train_dataset$Hour>=17 & new_train_dataset$Hour<=19),1,0)
+
+new_train_dataset$Hour_Low = ifelse((new_train_dataset$Hour>=0 & new_train_dataset$Hour<=6)|
+                                       (new_train_dataset$Hour>=20 & new_train_dataset$Hour<=24),1,0)
+
+new_train_dataset$TempratureFelt_High = ifelse(new_train_dataset$TempratureFelt>=0.75,1,0)
+new_train_dataset$TempratureFelt_Low = ifelse(new_train_dataset$TempratureFelt<=0.25,1,0)
+```
+
+## Analytical Approach
+  + Following analytical models can be built to predict the bike usage for next three months:
+    + Linear Regression
+    + Random Forest
+  + Comparison of the models can be carried out uisng the confusion matrix
+
+
+### Project Notes III
+
+* **Observations from Project Notes II:**
+    + As teamprature rises, the average bike usage increases.
+    + As teamprature felt rises, the average bike usage increases.
+    + As humidity rises, the averge bike usage falls.
+    + On average the humidity is high during a cloudy, LightShowers or Bad/Heavy shower days.
+    + The humidity falls as temprature increases.
+    + The bike usage increase as windspeed increases.However, we need to notice that windspeed had lot of natural outliers.
+    + Average bike usage increases as day progresses.
+    + Montly trend can be seen in average bike usage
+    + No particlaur trend can be seen for weekdays on average bike usage.
+    + Important Variables (excluding highly correlated variables)
+      + TempratureFealt
+      + WindSpeed
+      + Humidity
+      + Weather
+      + Season
+      + Weekday
+      + Year
+
+
+## Splitting Data: Train and Test
+
+```{r}
+# Creating Training and Testing Dataset with 70:30 proportion
+
+library(caret)
+
+set.seed(111)
+
+trainIndex = createDataPartition(new_train_dataset$TotalRiders, p = 0.7, list = FALSE, times = 1)
+
+Bike.Train = new_train_dataset[trainIndex,]
+Bike.Test = new_train_dataset[-trainIndex,]
+```
+
+## Linear Regression Model
+
+```{r echo=FALSE}
+LM.Model = lm(TotalRiders~TempratureFelt
+              + WindSpeed
+              + Humidity
+              + Weather
+              + Season
+              + Weekday
+              + Year
+              + Hour
+              + Holiday
+              , data = Bike.Train)
+
+summary(LM.Model)
+```
+
+# Correlation Accuracy
+
+```{r echo=FALSE}
+TotalRiderPredict = predict(LM.Model, newdata = Bike.Test)
+
+actuals_preds = data.frame(cbind(actual=Bike.Test$TotalRiders, predicted=TotalRiderPredict))
+correlation_accuracy <- cor(actuals_preds)
+correlation_accuracy
+```
+
+# Performace Parameters
+
+```{r echo=FALSE}
+DMwR::regr.eval(actuals_preds$actual, actuals_preds$predicted)
+```
+
+## Ensemble Modeling: Random Forest
+
+```{r echo=FALSE}
+library(randomForest)
+
+RF_model = randomForest(TotalRiders~TempratureFelt
+                        + WindSpeed
+                        + Humidity
+                        + Weather
+                        + Season
+                        + Weekday
+                        + Year
+                        + Hour
+                        + Holiday, 
+                        data = Bike.Train, ntree=101, importance=TRUE)
+
+RF_model
+```
+
+# Correlation Accuracy
+
+```{r echo=FALSE}
+TotalRiderPredictRF = predict(RF_model, newdata = Bike.Test)
+
+actuals_preds_RF <- data.frame(cbind(actual=Bike.Test$TotalRiders, predicted=TotalRiderPredictRF))
+
+correlation_accuracy <- cor(actuals_preds_RF)
+correlation_accuracy
+```
+
+# Performace Parameters
+
+```{r echo=FALSE}
+DMwR::regr.eval(actuals_preds_RF$actual, actuals_preds_RF$predicted)
+```
+```{r echo=FALSE}
+varImpPlot(RF_model)
+```
+
+## BAGGING Modelling
+
+```{r echo=FALSE}
+library(ipred)
+library(rpart)
+
+r.ctrl <- rpart.control(minsplit = 50,
+                        maxdepth = 10
+                        )
+
+Bike.bagging = bagging(TotalRiders~TempratureFelt
+                        + WindSpeed
+                        + Humidity
+                        + Weather
+                        + Season
+                        + Weekday
+                        + Year
+                        + Hour
+                        + Holiday,
+                      data = Bike.Train,
+                      control = r.ctrl)
+
+Bike.bagging
+```
+
+# Correlation Accuracy
+
+```{r echo=FALSE}
+TotalRiderPredictBagging = predict(Bike.bagging, newdata = Bike.Test)
+
+actuals_preds_Bagging <- data.frame(cbind(actual=Bike.Test$TotalRiders, predicted=TotalRiderPredictRF))
+
+correlation_accuracy <- cor(actuals_preds_Bagging)
+correlation_accuracy
+```
+
+# Performace Parameters
+
+```{r echo=FALSE}
+DMwR::regr.eval(actuals_preds_RF$actual, actuals_preds_RF$predicted)
+```
+
+## XGBOOST Modeling
+
+```{r echo=FALSE}
+library(xgboost)
+
+# XGBoost works with matices that contain only numberic data
+
+setwd("C:/Users/akishore/OneDrive - HCL Technologies Ltd/Abhishek Kishore Personal/Training/GreatLearning/Capstone Project/Forecast Bike Rentals")
+
+XGBOOT_dataset= read.csv("Train.csv", stringsAsFactors = FALSE)
+
+# Removing instant feature
+XGBOOT_dataset = XGBOOT_dataset[,-1]
+
+names(XGBOOT_dataset)[1] = "DateDay"
+names(XGBOOT_dataset)[2] = "Season"
+names(XGBOOT_dataset)[3] = "Year"
+names(XGBOOT_dataset)[4] = "Month"
+names(XGBOOT_dataset)[5] = "Hour"
+names(XGBOOT_dataset)[6] = "Holiday"
+names(XGBOOT_dataset)[7] = "Weekday"
+names(XGBOOT_dataset)[8] = "WorkingDay"
+names(XGBOOT_dataset)[9] = "Weather"
+names(XGBOOT_dataset)[10] = "Temprature"
+names(XGBOOT_dataset)[11] = "TempratureFelt"
+names(XGBOOT_dataset)[12] = "Humidity"
+names(XGBOOT_dataset)[13] = "WindSpeed"
+names(XGBOOT_dataset)[14] = "CasualRiders"
+names(XGBOOT_dataset)[15] = "RegisteredRiders"
+names(XGBOOT_dataset)[16] = "TotalRiders"
+
+set.seed(111)
+
+trainIndex = createDataPartition(XGBOOT_dataset$TotalRiders, p = 0.7, list = FALSE, times = 1)
+
+XGBOOT_Bike.Train = XGBOOT_dataset[trainIndex,]
+XGBOOT_Bike.Test = XGBOOT_dataset[-trainIndex,]
+
+xgb.Bike.Train_feature = as.matrix(XGBOOT_Bike.Train[,c(11,12,13,6,5,3,7,2,9)])
+xgb.Bike.Train_label = as.matrix(XGBOOT_Bike.Train[,16])
+
+xgb.Bike.test_feature = as.matrix(XGBOOT_Bike.Test[,c(11,12,13,6,5,3,7,2,9)])
+
+xgb_fit = xgboost(data = xgb.Bike.Train_feature,
+                  label = xgb.Bike.Train_label,
+                  eta = 0.1,
+                  max_depth = 5,
+                  min_child_weight = 3,
+                  nrounds = 10000,
+                  nfolds = 5,
+                  objective = "reg:squarederror", # for regression models
+                  verbose = 0, # Silent
+                  early_stoping_rounds = 10 # stop if no improvement for 10 consequtive tress
+                  )
+
+
+xgb_fit
+```
+
+# Correlation Accuracy
+
+```{r echo=FALSE}
+TotalRiderPredictXGB = predict(xgb_fit, newdata = xgb.Bike.test_feature)
+
+actuals_preds_XGB <- data.frame(cbind(actual=XGBOOT_Bike.Test$TotalRiders, predicted=TotalRiderPredictXGB))
+
+correlation_accuracy <- cor(actuals_preds_XGB)
+correlation_accuracy
+```
+
+# Performace Parameters
+
+```{r echo=FALSE}
+DMwR::regr.eval(actuals_preds_XGB$actual, actuals_preds_XGB$predicted)
+```
+
+
+## Predicting data for next three months
+
+```{r}
+# Removing instant feature
+test_dataset = test_dataset[,-1]
+
+names(test_dataset)[1] = "DateDay"
+names(test_dataset)[2] = "Season"
+names(test_dataset)[3] = "Year"
+names(test_dataset)[4] = "Month"
+names(test_dataset)[5] = "Hour"
+names(test_dataset)[6] = "Holiday"
+names(test_dataset)[7] = "Weekday"
+names(test_dataset)[8] = "WorkingDay"
+names(test_dataset)[9] = "Weather"
+names(test_dataset)[10] = "Temprature"
+names(test_dataset)[11] = "TempratureFelt"
+names(test_dataset)[12] = "Humidity"
+names(test_dataset)[13] = "WindSpeed"
+names(test_dataset)[14] = "CasualRiders"
+names(test_dataset)[15] = "RegisteredRiders"
+names(test_dataset)[16] = "TotalRiders"
+
+Bike.test_feature = as.matrix(test_dataset[,c(11,12,13,6,5,3,7,2,9)])
+
+TotalRiderPredictXGB = predict(xgb_fit, newdata = Bike.test_feature)
+
+test_dataset$TotalRiders = TotalRiderPredictXGB
+
+test_dataset$DateDay = as.Date(test_dataset$DateDay, format = "%d-%m-%Y")
+
+test_dataset$Season =  factor(test_dataset$Season, levels = 1:4, labels = season_labels)
+test_dataset$Weekday = factor(test_dataset$Weekday,levels = 0:6, labels = weekday_labels)
+test_dataset$WorkingDay = factor(test_dataset$WorkingDay, levels = c(1,0), labels = workday_labels)
+test_dataset$Weather = factor(test_dataset$Weather, levels = 1:4, labels = wheather_labels)
+test_dataset$Holiday = factor(test_dataset$Holiday, levels = c(0,1), labels = c("No","Yes"))
+test_dataset$Year = factor(test_dataset$Year, levels = c(0,1), labels = c(2011,2012))
+test_dataset$Month = factor(test_dataset$Month, levels = 1:12, labels = month_labels)
+```
+
+## Predicted Seasonal Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(Season,TotalRiders)) + geom_col(aes(color = Season)) + scale_y_continuous(labels = comma)
+```
+
+## Predicted Monthly Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(Month,TotalRiders)) + geom_col(aes(color = Month)) + scale_y_continuous(labels = comma)
+```
+
+## Predicted Hourly Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(Hour,TotalRiders)) + geom_col(aes(color = Hour)) + scale_y_continuous(labels = comma)
+```
+
+## Predicted Holiday Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(Holiday,TotalRiders)) + geom_col(aes(color = Holiday)) + scale_y_continuous(labels = comma)
+```
+
+## Predicted Weekday Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(Weekday,TotalRiders)) + geom_col(aes(color = Holiday)) + scale_y_continuous(labels = comma)
+```
+
+## Predicted WorkingDay Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(WorkingDay,TotalRiders)) + geom_col(aes(color = Holiday)) + scale_y_continuous(labels = comma)
+```
+
+## Predicted Weather Split
+
+```{r echo=FALSE}
+ggplot(test_dataset, aes(Weather,TotalRiders)) + geom_col(aes(color = Holiday)) + scale_y_continuous(labels = comma)
+```
+
+
+
